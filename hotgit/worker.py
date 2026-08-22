@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 import threading
 
 from .commits import CommitBuilder
@@ -14,13 +15,7 @@ from .trees import TreeBuilder
 
 @dataclass
 class RepositoryWorker:
-    """Own the reusable hot components for one repository.
-
-    The worker is deliberately synchronous: callers may serialize mutations
-    while reads use the persistent cat-file process. A future transport can
-    safely put this object behind a queue or IPC boundary without changing the
-    repository operations themselves.
-    """
+    """Own reusable hot components for one repository."""
 
     repository: Repository
 
@@ -31,14 +26,26 @@ class RepositoryWorker:
         self.refs = RefStore(self.repository)
         self._write_lock = threading.RLock()
         self._closed = False
+        self._state_lock = threading.Lock()
 
     def read_object(self, oid: str) -> GitObject:
-        self._check_open()
+        with self._state_lock:
+            self._check_open()
         return self.repository.read_object(oid)
 
+    def write(self, operation):
+        """Run a repository mutation while holding the per-repository lock."""
+        with self._write_lock:
+            with self._state_lock:
+                self._check_open()
+            return operation(self)
+
     def close(self) -> None:
-        if not self._closed:
-            self._closed = True
+        with self._write_lock:
+            with self._state_lock:
+                if self._closed:
+                    return
+                self._closed = True
             self.repository.close()
 
     def _check_open(self) -> None:
@@ -46,11 +53,17 @@ class RepositoryWorker:
             raise RuntimeError("repository worker is closed")
 
     def __enter__(self) -> "RepositoryWorker":
-        self._check_open()
+        with self._state_lock:
+            self._check_open()
         return self
 
     def __exit__(self, exc_type, exc_value, traceback) -> None:
         self.close()
+
+
+def canonical_repository_path(path: str | Path) -> str:
+    """Canonicalize a repository path without starting a Git worker."""
+    return str(Path(path).expanduser().resolve())
 
 
 class WorkerPool:
@@ -61,20 +74,17 @@ class WorkerPool:
         self._lock = threading.Lock()
 
     def get(self, path: str) -> RepositoryWorker:
-        key = str(Repository(path).path)
+        key = canonical_repository_path(path)
         with self._lock:
             worker = self._workers.get(key)
             if worker is not None:
-                # Avoid opening a second repository just to canonicalize paths.
-                # The temporary Repository above has a live reader, so close it
-                # immediately when a cached worker exists.
                 return worker
-            worker = RepositoryWorker(Repository(path))
+            worker = RepositoryWorker(Repository(key))
             self._workers[key] = worker
             return worker
 
     def close(self, path: str) -> None:
-        key = str(Repository(path).path)
+        key = canonical_repository_path(path)
         with self._lock:
             worker = self._workers.pop(key, None)
         if worker is not None:
