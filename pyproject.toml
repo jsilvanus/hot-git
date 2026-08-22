@@ -8,7 +8,6 @@ version = "0.2.0"
 description = "Fast, treeless Git repository access"
 requires-python = ">=3.11"
 readme = "README.md"
-license = { text = "MIT" }
 
 [tool.setuptools.packages.find]
 include = ["hotgit*"]
