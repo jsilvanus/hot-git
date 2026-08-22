@@ -4,9 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hot-git"
-version = "0.1.0"
+version = "0.2.0"
 description = "Fast, treeless Git repository access"
 requires-python = ">=3.11"
+readme = "README.md"
+license = { text = "MIT" }
+
+[tool.setuptools.packages.find]
+include = ["hotgit*"]
 
 [tool.pytest.ini_options]
 pythonpath = ["."]
