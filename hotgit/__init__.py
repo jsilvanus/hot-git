@@ -2,6 +2,7 @@
 
 from .commits import CommitBuilder, CommitIdentity
 from .objects import ObjectStore
+from .refs import RefStore
 from .repository import Repository
 from .trees import TreeBuilder, TreeEntry
 
@@ -9,6 +10,7 @@ __all__ = [
     "CommitBuilder",
     "CommitIdentity",
     "ObjectStore",
+    "RefStore",
     "Repository",
     "TreeBuilder",
     "TreeEntry",
