@@ -52,11 +52,20 @@ class TreeBuilder:
         return self.build(result)
 
     def replace_path(self, tree_oid: str, path: str, oid: str, mode: str = "100644") -> str:
-        """Replace or create a file at a slash-separated path."""
-        parts = [part for part in path.split("/") if part]
-        if not parts or any(part in {".", ".."} for part in parts):
-            raise ValueError("path must be a non-empty relative Git path")
+        parts = self._parts(path)
         return self._replace_parts(tree_oid, parts, oid, mode)
+
+    def remove_path(self, tree_oid: str, path: str) -> str:
+        """Remove a path and prune empty parent directories."""
+        parts = self._parts(path)
+        new_tree, _removed = self._remove_parts(tree_oid, parts)
+        return new_tree
+
+    def _parts(self, path: str) -> list[str]:
+        parts = path.split("/")
+        if not parts or any(not part or part in {".", ".."} for part in parts):
+            raise ValueError("path must be a non-empty relative Git path")
+        return parts
 
     def _replace_parts(self, tree_oid: str, parts: list[str], oid: str, mode: str) -> str:
         name = parts[0]
@@ -72,3 +81,24 @@ class TreeBuilder:
             child_tree = existing.oid
         new_child = self._replace_parts(child_tree, parts[1:], oid, mode)
         return self.replace(tree_oid, name, new_child, "040000")
+
+    def _remove_parts(self, tree_oid: str, parts: list[str]) -> tuple[str, bool]:
+        name = parts[0]
+        entries = self.entries(tree_oid)
+        existing = next((entry for entry in entries if entry.name == name), None)
+        if existing is None:
+            return tree_oid, False
+        if len(parts) == 1:
+            remaining = [entry for entry in entries if entry.name != name]
+            return self.build(remaining), True
+        if existing.mode not in {"040000", "040755", "040700"}:
+            raise RepositoryError(f"path component is not a directory: {name}")
+        child_tree, removed = self._remove_parts(existing.oid, parts[1:])
+        if not removed:
+            return tree_oid, False
+        child_entries = self.entries(child_tree)
+        if not child_entries:
+            remaining = [entry for entry in entries if entry.name != name]
+        else:
+            remaining = [TreeEntry(entry.mode, entry.name, child_tree) if entry.name == name else entry for entry in entries]
+        return self.build(remaining), True
