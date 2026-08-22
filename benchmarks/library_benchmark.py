@@ -18,8 +18,16 @@ if str(ROOT) not in sys.path:
 from hotgit import Change, Editor, Repository
 
 
-def git(*args: str, cwd: Path, input: bytes | None = None) -> bytes:
-    return subprocess.run(["git", *args], cwd=cwd, check=True, input=input, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
+def git(*args: str, cwd: Path, input: bytes | None = None, env: dict[str, str] | None = None) -> bytes:
+    return subprocess.run(
+        ["git", *args],
+        cwd=cwd,
+        check=True,
+        input=input,
+        env=env,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ).stdout
 
 
 def make_repo(root: Path, files: int) -> tuple[Path, list[str]]:
