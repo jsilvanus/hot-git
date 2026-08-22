@@ -7,6 +7,7 @@ from pathlib import Path
 import threading
 
 from .commits import CommitBuilder
+from .edit import Change, EditResult, Editor
 from .objects import ObjectStore
 from .refs import RefStore
 from .repository import GitObject, Repository
@@ -24,6 +25,7 @@ class RepositoryWorker:
         self.trees = TreeBuilder(self.repository, self.objects)
         self.commits = CommitBuilder(self.repository, self.objects)
         self.refs = RefStore(self.repository)
+        self.editor = Editor(self.repository)
         self._write_lock = threading.RLock()
         self._closed = False
         self._state_lock = threading.Lock()
@@ -39,6 +41,9 @@ class RepositoryWorker:
             with self._state_lock:
                 self._check_open()
             return operation(self)
+
+    def edit(self, ref: str, changes: list[Change] | tuple[Change, ...], message: str, expected_ref: str | None = None) -> EditResult:
+        return self.write(lambda _worker: self.editor.edit(ref, changes, message, expected_ref=expected_ref))
 
     def close(self) -> None:
         with self._write_lock:
