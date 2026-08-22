@@ -5,6 +5,7 @@ from .objects import ObjectStore
 from .refs import RefStore
 from .repository import Repository
 from .trees import TreeBuilder, TreeEntry
+from .worker import RepositoryWorker, WorkerPool
 
 __all__ = [
     "CommitBuilder",
@@ -12,6 +13,8 @@ __all__ = [
     "ObjectStore",
     "RefStore",
     "Repository",
+    "RepositoryWorker",
     "TreeBuilder",
     "TreeEntry",
+    "WorkerPool",
 ]
