@@ -19,15 +19,7 @@ from hotgit import Change, Editor, Repository
 
 
 def git(*args: str, cwd: Path, input: bytes | None = None, env: dict[str, str] | None = None) -> bytes:
-    return subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        check=True,
-        input=input,
-        env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    ).stdout
+    return subprocess.run(["git", *args], cwd=cwd, check=True, input=input, env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE).stdout
 
 
 def make_repo(root: Path, files: int) -> tuple[Path, list[str]]:
@@ -175,9 +167,9 @@ def main() -> None:
         print(f"  worktree Git:             {wt:.3f}s ({wt / args.writes:.3f}s/edit)")
         print(f"  treeless Git plumbing:    {treeless:.3f}s ({treeless / args.writes:.3f}s/edit)")
         print(f"  hot-git library:          {library:.3f}s ({library / args.writes:.3f}s/edit)")
-        print(f"  treeless vs worktree:     {wt / treeless:.2f}x")
-        print(f"  library vs worktree:      {wt / library:.2f}x")
-        print(f"  library vs plumbing:      {treeless / library:.2f}x")
+        print(f"  worktree / treeless:      {wt / treeless:.2f}x")
+        print(f"  library / worktree:       {library / wt:.2f}x")
+        print(f"  library / plumbing:       {library / treeless:.2f}x")
         cas_time, succeeded, conflicted, unconditional_time, unconditional = library_cas_benchmark(source, args.workers)
         print("\nCONCURRENT REF UPDATES")
         print(f"  workers:                  {args.workers}")
