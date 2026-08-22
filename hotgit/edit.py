@@ -7,8 +7,8 @@ from dataclasses import dataclass
 from .commits import CommitBuilder, CommitIdentity
 from .objects import ObjectStore
 from .refs import RefStore, RefConflictError
-from .repository import Repository
-from .trees import TreeBuilder
+from .repository import Repository, RepositoryError
+from .trees import TreeBuilder, TreeEntry
 
 
 @dataclass(frozen=True)
@@ -26,12 +26,13 @@ class Change:
 
 @dataclass(frozen=True)
 class EditResult:
-    """Result of a successful ref-based edit."""
+    """Result of a successful ref-based edit, suitable for command chaining."""
 
     ref: str
     base: str
     commit: str
     tree: str
+    changed_paths: tuple[str, ...] = ()
 
 
 class Editor:
@@ -53,10 +54,11 @@ class Editor:
         author: CommitIdentity | None = None,
         committer: CommitIdentity | None = None,
     ) -> EditResult:
+        normalized = tuple(changes)
         base = expected_ref if expected_ref is not None else self.refs.get(ref)
         base_tree = self._commit_tree(base)
         tree = base_tree
-        for change in changes:
+        for change in normalized:
             if change.delete:
                 tree = self.trees.remove_path(tree, change.path)
             else:
@@ -65,7 +67,28 @@ class Editor:
         commit = self.commits.create(tree, message, [base], author=author, committer=committer)
         if not self.refs.cas(ref, base, commit):
             raise RefConflictError(ref)
-        return EditResult(ref, base, commit, tree)
+        return EditResult(ref, base, commit, tree, tuple(change.path for change in normalized))
+
+    def read_file(self, ref_or_commit: str, path: str) -> bytes:
+        """Read a file from a ref or commit without checking out a working tree."""
+        commit = self.refs.get(ref_or_commit) if ref_or_commit.startswith("refs/") else ref_or_commit
+        tree = self._commit_tree(commit)
+        parts = [part for part in path.split("/") if part]
+        if not parts or any(part in {".", ".."} for part in parts):
+            raise ValueError("path must be a non-empty relative Git path")
+        for index, part in enumerate(parts):
+            entry = next((entry for entry in self.trees.entries(tree) if entry.name == part), None)
+            if entry is None:
+                raise KeyError(path)
+            if index == len(parts) - 1:
+                obj = self.repository.read_object(entry.oid)
+                if obj.type != "blob":
+                    raise RepositoryError(f"{path} is not a file")
+                return obj.data
+            if entry.mode not in {"040000", "040755", "040700"}:
+                raise RepositoryError(f"path component is not a directory: {part}")
+            tree = entry.oid
+        raise KeyError(path)
 
     def _commit_tree(self, commit: str) -> str:
         obj = self.repository.read_object(commit)
