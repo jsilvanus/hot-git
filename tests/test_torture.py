@@ -34,6 +34,19 @@ def fsck(repo: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def test_reader_recovers_after_cat_file_worker_dies(tmp_path: Path) -> None:
+    repo_path = make_repo(tmp_path)
+    oid = git("rev-parse", "HEAD:hello.txt", cwd=repo_path).stdout.strip()
+    with Repository(repo_path) as repo:
+        assert repo.read_object(oid).data == b"hello\n"
+        process = repo.reader._process
+        assert process is not None
+        process.kill()
+        process.wait()
+        assert repo.read_object(oid).data == b"hello\n"
+    fsck(repo_path)
+
+
 def test_concurrent_identical_object_writes(tmp_path: Path) -> None:
     repo_path = make_repo(tmp_path)
     with Repository(repo_path) as repo:
@@ -97,7 +110,6 @@ def test_temporary_object_files_are_not_left_behind(tmp_path: Path) -> None:
 
 @pytest.mark.skipif(sys.platform == "win32", reason="POSIX process termination semantics")
 def test_killed_writer_leaves_repository_valid(tmp_path: Path) -> None:
-    repo_path = make_repo(tmp_path)
     script = r'''
 import os
 import time
