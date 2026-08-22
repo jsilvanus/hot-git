@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import time
 
-from hotgit import Change, Repository, RepositoryWorker
+from hotgit import Change, Editor, Repository
 
 
 def git(*args: str, cwd: Path) -> str:
@@ -45,21 +45,19 @@ def hot_benchmark(source: Path, writes: int) -> float:
     repo = source.parent / "hot"
     shutil.copytree(source, repo)
     with Repository(repo) as repository:
-        worker = RepositoryWorker(repository)
-        try:
-            base = worker.refs.get("refs/heads/main")
-            start = time.perf_counter()
-            for i in range(writes):
-                result = worker.edit(
-                    "refs/heads/main",
-                    [Change(f"file-{i:05d}.txt", f"updated-{i}\n".encode())],
-                    f"edit {i}",
-                    expected_ref=base,
-                )
-                base = result.commit
-            return time.perf_counter() - start
-        finally:
-            worker.close()
+        editor = Editor(repository)
+        ref = "refs/heads/main"
+        base = editor.refs.get(ref)
+        start = time.perf_counter()
+        for i in range(writes):
+            result = editor.edit(
+                ref,
+                [Change(f"file-{i:05d}.txt", f"updated-{i}\n".encode())],
+                f"edit {i}",
+                expected_ref=base,
+            )
+            base = result.commit
+        return time.perf_counter() - start
 
 
 def main() -> None:
