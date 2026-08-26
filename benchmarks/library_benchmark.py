@@ -25,7 +25,7 @@ def git(*args: str, cwd: Path, input: bytes | None = None, env: dict[str, str] |
 def make_repo(root: Path, files: int) -> tuple[Path, list[str]]:
     repo = root / "repo"
     repo.mkdir()
-    git("init", "-q", cwd=repo)
+    git("init", "-q", "-b", "main", cwd=repo)
     git("config", "user.name", "benchmark", cwd=repo)
     git("config", "user.email", "benchmark@example.invalid", cwd=repo)
     for i in range(files):
