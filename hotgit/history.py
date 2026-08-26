@@ -101,8 +101,9 @@ class History:
         """Yield each reachable commit once, depth-first from the given OIDs.
 
         If *starts* is omitted, traversal starts from all repository refs.
-        Traversal stops at the boundary of a shallow clone instead of
-        failing, since parents of a shallow commit are not present locally.
+        Annotated tag objects are peeled to their target commit before
+        traversal. Traversal stops at the boundary of a shallow clone instead
+        of failing, since parents of a shallow commit are not present locally.
         """
         if starts is None:
             starts = tuple(ref.oid for ref in self.refs())
@@ -110,7 +111,7 @@ class History:
         seen: set[str] = set()
         stack = list(reversed(starts))
         while stack:
-            oid = stack.pop()
+            oid = self._resolve_commit_oid(stack.pop())
             if oid in seen:
                 continue
             seen.add(oid)
@@ -125,11 +126,29 @@ class History:
             return set()
         return {line.strip() for line in shallow_file.read_text().splitlines() if line.strip()}
 
+    def _resolve_commit_oid(self, oid: str) -> str:
+        """Peel an object through annotated tags until a commit is reached."""
+        seen: set[str] = set()
+        current = oid
+        while current not in seen:
+            seen.add(current)
+            obj = self.repository.read_object(current)
+            if obj.type == "commit":
+                return current
+            if obj.type != "tag":
+                raise RepositoryError(f"object {current} is {obj.type}, not a commit")
+
+            match = re.search(rb"(?:^|\n)object ([0-9a-f]+)(?:\n|$)", obj.data)
+            if not match:
+                raise RepositoryError(f"invalid tag object {current}: missing object header")
+            current = match.group(1).decode("ascii")
+
+        raise RepositoryError(f"cyclic tag chain starting at {oid}")
+
     def commit(self, oid: str) -> Commit:
-        """Read and parse one commit object."""
+        """Read and parse one commit object, peeling annotated tags first."""
+        oid = self._resolve_commit_oid(oid)
         obj = self.repository.read_object(oid)
-        if obj.type != "commit":
-            raise RepositoryError(f"object {oid} is {obj.type}, not a commit")
         try:
             headers_raw, message_raw = obj.data.split(b"\n\n", 1)
         except ValueError as exc:
