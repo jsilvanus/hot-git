@@ -1,7 +1,7 @@
 from pathlib import Path
 import subprocess
 
-from hotgit import CommitBuilder, CommitIdentity, ObjectStore, Repository, TreeBuilder
+from hotgit import CommitBuilder, CommitIdentity, ObjectStore, RefStore, Repository, TreeBuilder
 
 
 def git(*args: str, cwd: Path) -> str:
@@ -23,6 +23,7 @@ def make_repo(tmp_path: Path) -> Path:
 def test_treeless_write_is_valid_git(tmp_path: Path) -> None:
     repo_path = make_repo(tmp_path)
     base = git("rev-parse", "HEAD", cwd=repo_path).strip()
+    branch = git("symbolic-ref", "--short", "HEAD", cwd=repo_path).strip()
 
     with Repository(repo_path) as repo:
         objects = ObjectStore(repo)
@@ -34,6 +35,7 @@ def test_treeless_write_is_valid_git(tmp_path: Path) -> None:
         tree = trees.replace(base_tree, "hello.txt", blob)
         author = CommitIdentity("Test User", "test@example.invalid", timestamp=1700000000, timezone="+0000")
         commit = commits.create(tree, "hot-git edit", [base], author=author, committer=author)
+        RefStore(repo).update(f"refs/heads/{branch}", commit, expected_old=base)
 
         assert git("cat-file", "-t", commit, cwd=repo_path).strip() == "commit"
         assert git("cat-file", "-t", tree, cwd=repo_path).strip() == "tree"

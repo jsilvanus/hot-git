@@ -101,9 +101,12 @@ class History:
         """Yield each reachable commit once, depth-first from the given OIDs.
 
         If *starts* is omitted, traversal starts from all repository refs.
+        Traversal stops at the boundary of a shallow clone instead of
+        failing, since parents of a shallow commit are not present locally.
         """
         if starts is None:
             starts = tuple(ref.oid for ref in self.refs())
+        shallow = self._shallow_oids()
         seen: set[str] = set()
         stack = list(reversed(starts))
         while stack:
@@ -113,7 +116,14 @@ class History:
             seen.add(oid)
             commit = self.commit(oid)
             yield commit
-            stack.extend(reversed(commit.parents))
+            if oid not in shallow:
+                stack.extend(reversed(commit.parents))
+
+    def _shallow_oids(self) -> set[str]:
+        shallow_file = self.repository.git_dir / "shallow"
+        if not shallow_file.is_file():
+            return set()
+        return {line.strip() for line in shallow_file.read_text().splitlines() if line.strip()}
 
     def commit(self, oid: str) -> Commit:
         """Read and parse one commit object."""

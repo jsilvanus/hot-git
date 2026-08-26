@@ -122,6 +122,7 @@ with Repository(os.environ["HOT_GIT_REPO"]) as repo:
             os.kill(os.getpid(), 9)
         time.sleep(0.00001)
 '''
+    repo_path = make_repo(tmp_path)
     env = dict(__import__("os").environ, HOT_GIT_REPO=str(repo_path))
     result = subprocess.run([sys.executable, "-c", script], env=env)
     assert result.returncode != 0
