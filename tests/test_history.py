@@ -55,3 +55,24 @@ def test_history_deduplicates_reachable_commits(tmp_path: Path) -> None:
         commits = list(History(repository).commits([first, second]))
 
     assert {commit.oid for commit in commits} == {first, second}
+
+
+def test_history_peels_annotated_tags(tmp_path: Path) -> None:
+    repo_path = tmp_path / "repo"
+    repo_path.mkdir()
+    git(repo_path, "init")
+    git(repo_path, "config", "user.name", "Test")
+    git(repo_path, "config", "user.email", "test@example.test")
+    (repo_path / "file.txt").write_text("one\n", encoding="utf-8")
+    git(repo_path, "add", "file.txt")
+    git(repo_path, "commit", "-m", "first")
+    first = git(repo_path, "rev-parse", "HEAD")
+    git(repo_path, "tag", "v1.0.0", "-m", "release")
+
+    with Repository(repo_path) as repository:
+        history = History(repository)
+        refs = {ref.name: ref.oid for ref in history.refs()}
+        commits = list(history.commits([refs["refs/tags/v1.0.0"]]))
+
+    assert commits[0].oid == first
+    assert len(commits) == 1
