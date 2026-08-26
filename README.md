@@ -2,7 +2,7 @@
 
 `hot-git` is a Python library for fast, server-oriented access to Git repositories without requiring a working-tree checkout.
 
-It is designed for long-lived processes such as MCP servers, agent runtimes, development services, and other systems that repeatedly read and modify the same repositories.
+It is designed for long-lived processes such as MCP servers, agent runtimes, development services, repository analysis, and other systems that repeatedly read and modify the same repositories.
 
 ## Why hot-git?
 
@@ -23,7 +23,7 @@ hot-git does **not** introduce a second database or replace Git's object databas
 
 The library is currently at **0.2.x** and is being prepared for integration with `personal-repo-mcp`.
 
-The core read, treeless edit, multi-file change, worker lifecycle, and ref-CAS paths are implemented and benchmarked. The next integration step is to use hot-git as a backend inside the MCP server while retaining the existing Git backend as a fallback.
+The core read, treeless edit, multi-file change, worker lifecycle, ref-CAS, and read-only history paths are implemented and tested. The next integration step is to use hot-git as a backend inside the MCP server while retaining the existing Git backend as a fallback.
 
 This is an engineering project rather than a promise of API stability. Until a 1.0 release, applications should pin the version they use.
 
@@ -57,6 +57,26 @@ with Repository("/path/to/repository") as repo:
 ```
 
 The repository owns a persistent object reader. Reusing the same `Repository` instance is therefore important for workloads with many reads.
+
+### Read commit history
+
+```python
+from hotgit import History, Repository
+
+with Repository("/path/to/repository") as repo:
+    history = History(repo)
+    for commit in history.commits():
+        print(commit.oid)
+        print(commit.author.name, commit.author.email)
+        print(commit.author_datetime)
+        print(commit.committer.name, commit.committer.email)
+        print(commit.committer_datetime)
+        print(commit.trailers)
+```
+
+`History` traverses commits reachable from repository refs and de-duplicates commits shared by multiple branches. It reads commit objects directly through hot-git's persistent object reader and does not require a working tree. A caller can also provide one or more starting object IDs to `commits()` when a narrower traversal is required.
+
+The `Commit` model exposes the tree, parents, author, committer, timestamps, message, and parsed message trailers. This makes the read-side history API suitable for repository analysis as well as server and agent workloads.
 
 ### Make a treeless edit
 
@@ -117,10 +137,10 @@ Workers share the persistent read path and serialize repository mutations where 
 ## Architecture
 
 ```text
-Application / MCP server
+Application / MCP server / analyzer
           |
           v
-  RepositoryWorker
+  RepositoryWorker / History
           |
    +------+-------+----------------+
    |              |                |
@@ -212,9 +232,10 @@ The existing backend remains available during the transition. hot-git should be 
 2. Avoid unnecessary working-tree operations.
 3. Reuse expensive long-lived Git processes.
 4. Make concurrent ref updates explicit and safe.
-5. Keep the high-level API small enough for MCP and agent runtimes.
-6. Preserve compatibility with ordinary Git tooling.
-7. Optimize only after measuring the actual workload.
+5. Make Git history and metadata efficiently readable for long-lived consumers.
+6. Keep the high-level API small enough for MCP, agent, and analysis runtimes.
+7. Preserve compatibility with ordinary Git tooling.
+8. Optimize only after measuring the actual workload.
 
 ## License
 
